@@ -23,12 +23,18 @@ class ErrorState extends StatelessWidget {
             const SizedBox(height: AppDimensions.paddingM),
             Text(
               message,
-              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
               const SizedBox(height: AppDimensions.paddingM),
-              AppButton(label: 'Retry', onPressed: onRetry, outlined: true),
+              AppButton(
+                label: 'Retry',
+                onPressed: onRetry,
+                variant: AppButtonVariant.outline,
+              ),
             ],
           ],
         ),
