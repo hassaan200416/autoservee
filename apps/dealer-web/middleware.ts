@@ -17,7 +17,8 @@ export async function middleware(req: NextRequest) {
     }
   );
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session && !req.nextUrl.pathname.startsWith("/login")) {
+  const isPublicPath = req.nextUrl.pathname.startsWith("/login") || req.nextUrl.pathname.startsWith("/accept-invite");
+  if (!session && !isPublicPath) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
   return res;

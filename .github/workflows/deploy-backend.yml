@@ -27,12 +27,12 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       - name: Set function secrets
         run: |
-          if [ -n "$XAI_API_KEY" ]; then
-            supabase secrets set XAI_API_KEY="$XAI_API_KEY" --project-ref $SUPABASE_PROJECT_REF
+          if [ -n "$GROQ_API_KEY" ]; then
+            supabase secrets set GROQ_API_KEY="$GROQ_API_KEY" --project-ref $SUPABASE_PROJECT_REF
           else
-            echo "XAI_API_KEY not set yet — skipping."
+            echo "GROQ_API_KEY not set yet — skipping."
           fi
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}

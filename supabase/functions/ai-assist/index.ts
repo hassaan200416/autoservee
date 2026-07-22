@@ -1,6 +1,6 @@
-// ai-assist: dealer-facing AI feature (Grok/xAI). Summarizes a lead's history
+// ai-assist: dealer-facing AI feature (Groq). Summarizes a lead's history
 // or drafts a follow-up message. Never sends anything itself, never runs from
-// the browser — the XAI_API_KEY must only ever live in this function's env.
+// the browser — the GROQ_API_KEY must only ever live in this function's env.
 import { corsHeaders } from "../_shared/cors.ts";
 import { supabaseAdmin, supabaseAsCaller } from "../_shared/supabaseAdmin.ts";
 
@@ -53,24 +53,24 @@ Deno.serve(async (req) => {
     ? `Summarize this car-buyer lead's activity in 2-3 plain sentences for a busy salesperson.\nCustomer: ${lead.customer_name}\nStage: ${lead.stage}\nActivity log:\n${historyText}`
     : `Draft a short, friendly follow-up message (for the salesperson to review and send manually) to this customer, based on their activity below. Do not invent details not present in the log.\nCustomer: ${lead.customer_name}\nStage: ${lead.stage}\nActivity log:\n${historyText}`;
 
-  const grokRes = await fetch("https://api.x.ai/v1/chat/completions", {
+  const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${Deno.env.get("XAI_API_KEY")}`,
+      "Authorization": `Bearer ${Deno.env.get("GROQ_API_KEY")}`,
     },
     body: JSON.stringify({
-      model: "grok-4",
+      model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: prompt }],
       max_tokens: 300,
     }),
   });
 
-  if (!grokRes.ok) {
+  if (!groqRes.ok) {
     return new Response(JSON.stringify({ error: "ai_unavailable" }), { status: 502, headers: corsHeaders });
   }
-  const grokData = await grokRes.json();
-  const text = grokData.choices?.[0]?.message?.content ?? "";
+  const groqData = await groqRes.json();
+  const text = groqData.choices?.[0]?.message?.content ?? "";
 
   await admin.from("ai_usage_log").insert({
     dealer_id: lead.dealer_id, staff_id: staffRow?.id ?? null, lead_id, action,

@@ -4,7 +4,7 @@
 // and re-export from there instead of maintaining these by hand.
 
 export type DealerStatus = "pending" | "approved" | "suspended";
-export type StaffRole = "owner" | "manager" | "salesperson";
+export type StaffRole = "owner" | "staff";
 export type StaffStatus = "invited" | "active" | "deactivated";
 export type CarStatus = "available" | "reserved" | "sold";
 export type LeadSource = "pakwheels" | "walk_in" | "referral" | "phone" | "website" | "other";
