@@ -1,0 +1,16 @@
+{
+  "name": "@autoserve/supabase-client",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@supabase/ssr": "^0.4.0",
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "peerDependencies": {
+    "next": "^14.2.5"
+  },
+  "exports": {
+    "./browser": "./src/browser.ts",
+    "./server": "./src/server.ts"
+  }
+}

@@ -32,13 +32,20 @@ class VehicleCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 16 / 10,
-              child: () {
-                final imageUrl = vehicle.primaryImageUrl;
-                if (imageUrl != null && imageUrl.isNotEmpty) {
-                  return Image.network(
-                    imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+              child: vehicle.primaryImageUrl != null
+                  ? Image.network(
+                      vehicle.primaryImageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: AppColors.shimmerBase,
+                        child: const Icon(
+                          Icons.directions_car,
+                          size: 40,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    )
+                  : Container(
                       color: AppColors.shimmerBase,
                       child: const Icon(
                         Icons.directions_car,
@@ -46,18 +53,6 @@ class VehicleCard extends StatelessWidget {
                         color: AppColors.textTertiary,
                       ),
                     ),
-                  );
-                }
-
-                return Container(
-                  color: AppColors.shimmerBase,
-                  child: const Icon(
-                    Icons.directions_car,
-                    size: 40,
-                    color: AppColors.textTertiary,
-                  ),
-                );
-              }(),
             ),
             Padding(
               padding: const EdgeInsets.all(AppDimensions.paddingM),

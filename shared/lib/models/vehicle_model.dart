@@ -38,19 +38,6 @@ class VehicleModel {
   });
 
   factory VehicleModel.fromJson(Map<String, dynamic> json) {
-    final rawImages = json['vehicle_images'];
-    final images = <VehicleImageModel>[];
-
-    if (rawImages is List) {
-      for (final item in rawImages) {
-        if (item is Map) {
-          images.add(VehicleImageModel.fromJson(Map<String, dynamic>.from(item)));
-        }
-      }
-    } else if (rawImages is Map) {
-      images.add(VehicleImageModel.fromJson(Map<String, dynamic>.from(rawImages)));
-    }
-
     return VehicleModel(
       id: json['id'] as String,
       dealershipId: json['dealership_id'] as String,
@@ -68,7 +55,11 @@ class VehicleModel {
       status: json['status'] as String,
       viewsCount: json['views_count'] as int? ?? 0,
       createdAt: DateTime.parse(json['created_at'] as String),
-      images: images,
+      images: json['vehicle_images'] != null
+          ? (json['vehicle_images'] as List)
+                .map((img) => VehicleImageModel.fromJson(img))
+                .toList()
+          : [],
     );
   }
 
@@ -94,12 +85,8 @@ class VehicleModel {
 
   String? get primaryImageUrl {
     if (images.isEmpty) return null;
-
     final primary = images.where((img) => img.isPrimary).toList();
-    final candidate = primary.isNotEmpty ? primary.first : images.first;
-    final imageUrl = candidate.imageUrl.trim();
-
-    return imageUrl.isEmpty ? null : imageUrl;
+    return primary.isNotEmpty ? primary.first.imageUrl : images.first.imageUrl;
   }
 
   String get formattedPrice {
@@ -123,12 +110,10 @@ class VehicleImageModel {
   });
 
   factory VehicleImageModel.fromJson(Map<String, dynamic> json) {
-    final imageUrl = json['image_url'];
-
     return VehicleImageModel(
-      id: json['id'] as String? ?? '',
-      vehicleId: json['vehicle_id'] as String? ?? '',
-      imageUrl: imageUrl is String ? imageUrl : '',
+      id: json['id'] as String,
+      vehicleId: json['vehicle_id'] as String,
+      imageUrl: json['image_url'] as String,
       isPrimary: json['is_primary'] as bool? ?? false,
       displayOrder: json['display_order'] as int? ?? 0,
     );
