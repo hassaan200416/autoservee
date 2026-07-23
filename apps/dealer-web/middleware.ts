@@ -16,11 +16,43 @@ export async function middleware(req: NextRequest) {
       },
     }
   );
+
   const { data: { session } } = await supabase.auth.getSession();
-  const isPublicPath = req.nextUrl.pathname.startsWith("/login") || req.nextUrl.pathname.startsWith("/accept-invite");
-  if (!session && !isPublicPath) {
+  const path = req.nextUrl.pathname;
+  const isPublic =
+    path.startsWith("/login") ||
+    path.startsWith("/accept-invite") ||
+    path.startsWith("/forgot-password") ||
+    path.startsWith("/preview");
+
+  if (!session && !isPublic) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
+
+  if (session && !isPublic) {
+    const { data: staffRow } = await supabase
+      .from("dealer_staff")
+      .select("status, role, dealers(status)")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    const dealerStatus = (staffRow as { dealers?: { status?: string } } | null)?.dealers?.status;
+    if (!staffRow || staffRow.status === "deactivated" || dealerStatus === "suspended") {
+      await supabase.auth.signOut();
+      const login = new URL("/login", req.url);
+      login.searchParams.set("reason", dealerStatus === "suspended" ? "suspended" : "deactivated");
+      return NextResponse.redirect(login);
+    }
+
+    if (path.startsWith("/staff") && staffRow.role !== "owner") {
+      return NextResponse.redirect(new URL("/home", req.url));
+    }
+  }
+
+  if (session && (path === "/login" || path === "/forgot-password")) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
   return res;
 }
 

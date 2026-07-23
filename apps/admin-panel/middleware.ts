@@ -16,10 +16,43 @@ export async function middleware(req: NextRequest) {
       },
     }
   );
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session && !req.nextUrl.pathname.startsWith("/login")) {
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const path = req.nextUrl.pathname;
+  const isLogin = path.startsWith("/login");
+
+  if (!session && !isLogin) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
+
+  if (session && !isLogin) {
+    const { data: adminRow } = await supabase
+      .from("admin_users")
+      .select("id")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    if (!adminRow) {
+      await supabase.auth.signOut();
+      const login = new URL("/login", req.url);
+      login.searchParams.set("reason", "not_admin");
+      return NextResponse.redirect(login);
+    }
+  }
+
+  if (session && isLogin) {
+    const { data: adminRow } = await supabase
+      .from("admin_users")
+      .select("id")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+    if (adminRow) {
+      return NextResponse.redirect(new URL("/overview", req.url));
+    }
+  }
+
   return res;
 }
 

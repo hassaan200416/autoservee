@@ -12,8 +12,8 @@ Deno.serve(async (req) => {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return new Response(JSON.stringify({ error: "missing auth" }), { status: 401, headers: corsHeaders });
 
-  const { lead_id, action } = await req.json(); // action: "summarize_notes" | "draft_followup"
-  if (!lead_id || !["summarize_notes", "draft_followup"].includes(action)) {
+  const { lead_id, action } = await req.json(); // action: "summarize_notes" | "draft_followup" | "suggest_next_step"
+  if (!lead_id || !["summarize_notes", "draft_followup", "suggest_next_step"].includes(action)) {
     return new Response(JSON.stringify({ error: "invalid input" }), { status: 400, headers: corsHeaders });
   }
 
@@ -49,9 +49,12 @@ Deno.serve(async (req) => {
     .map((a) => `- [${a.action}] ${a.detail ?? ""}`.trim())
     .join("\n");
 
-  const prompt = action === "summarize_notes"
-    ? `Summarize this car-buyer lead's activity in 2-3 plain sentences for a busy salesperson.\nCustomer: ${lead.customer_name}\nStage: ${lead.stage}\nActivity log:\n${historyText}`
-    : `Draft a short, friendly follow-up message (for the salesperson to review and send manually) to this customer, based on their activity below. Do not invent details not present in the log.\nCustomer: ${lead.customer_name}\nStage: ${lead.stage}\nActivity log:\n${historyText}`;
+  const prompts: Record<string, string> = {
+    summarize_notes: `Summarize this car-buyer lead's activity in 2-3 plain sentences for a busy salesperson.\nCustomer: ${lead.customer_name}\nStage: ${lead.stage}\nActivity log:\n${historyText}`,
+    draft_followup: `Draft a short, friendly follow-up message (for the salesperson to review and send manually) to this customer, based on their activity below. Do not invent details not present in the log.\nCustomer: ${lead.customer_name}\nStage: ${lead.stage}\nActivity log:\n${historyText}`,
+    suggest_next_step: `Based on this car-buyer lead's stage and activity, suggest ONE concrete next action the salesperson should take today. Be specific and brief (1-2 sentences). Do not invent details not present in the log.\nCustomer: ${lead.customer_name}\nStage: ${lead.stage}\nActivity log:\n${historyText}`,
+  };
+  const prompt = prompts[action];
 
   const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",

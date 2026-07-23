@@ -1,0 +1,65 @@
+-- AutoServe demo seed
+--
+-- HOW TO USE
+-- ----------
+-- 1. Create auth users first in Supabase Studio → Authentication → Users:
+--      - One admin user (email/password)
+--      - One dealer owner user
+--    Copy their UUIDs — auth.users rows cannot be invented via plain SQL
+--    without the Auth Admin API.
+--
+-- 2. Replace the placeholders below:
+--      <ADMIN_USER_ID>   — UUID of the admin auth user
+--      <OWNER_USER_ID>   — UUID of the dealer owner auth user
+--
+-- 3. Run this file in Studio → SQL Editor (or: psql / supabase db reset with
+--    seed configured). Prefer creating dealers via Admin → Dealers
+--    (create-dealer edge function) for real invites; this seed is for local demos.
+--
+-- After seed: sign in to admin-panel (:3001) as the admin user, and
+-- dealer-web (:3000) as the owner (set dealer_staff.status = 'active' if needed).
+
+-- ---------------------------------------------------------------------------
+-- Admin
+-- ---------------------------------------------------------------------------
+-- insert into admin_users (user_id, full_name)
+-- values ('<ADMIN_USER_ID>', 'Demo Admin');
+
+-- ---------------------------------------------------------------------------
+-- Dealer + owner staff
+-- ---------------------------------------------------------------------------
+-- insert into dealers (id, name, city, contact_phone, status)
+-- values (
+--   'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+--   'Demo Motors',
+--   'Lahore',
+--   '03001234567',
+--   'approved'
+-- );
+
+-- insert into dealer_staff (dealer_id, user_id, full_name, role, status)
+-- values (
+--   'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+--   '<OWNER_USER_ID>',
+--   'Demo Owner',
+--   'owner',
+--   'active'
+-- );
+
+-- ---------------------------------------------------------------------------
+-- Sample cars (replace dealer_id if you used a different UUID)
+-- ---------------------------------------------------------------------------
+-- insert into cars (dealer_id, make, model, year, price, status, mileage, color, transmission, fuel_type, condition)
+-- values
+--   ('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', 'Toyota', 'Corolla', 2021, 4850000, 'available', 42000, 'White', 'automatic', 'petrol', 'good'),
+--   ('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', 'Honda', 'Civic', 2020, 6200000, 'available', 38000, 'Black', 'automatic', 'petrol', 'excellent'),
+--   ('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', 'Suzuki', 'Swift', 2019, 3150000, 'reserved', 51000, 'Red', 'manual', 'petrol', 'fair');
+
+-- ---------------------------------------------------------------------------
+-- Sample leads
+-- ---------------------------------------------------------------------------
+-- insert into leads (dealer_id, customer_name, customer_phone, source, stage, notes)
+-- values
+--   ('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', 'Ali Khan', '03001112233', 'pakwheels', 'new', 'Asked about Corolla financing'),
+--   ('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', 'Sara Ahmed', '03004445566', 'walk_in', 'contacted', 'Visited Saturday, wants Civic'),
+--   ('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', 'Bilal Raza', '03007778899', 'referral', 'negotiating', 'Offer at 6.0M on Civic');

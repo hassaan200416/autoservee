@@ -2,7 +2,7 @@
 
 Scope: **Dealer Web App + Admin Panel only, plus one dealer-facing AI assistant feature.** No customer app, no payments, no delivery, no WhatsApp automation. Those stay Stage 2/3 — designing them now would be guessing at requirements you don't have yet.
 
-Stack: Next.js (TypeScript) frontends, Supabase (Postgres, Auth, Storage, Edge Functions) as the backend, xAI Grok API for the AI assistant feature (called server-side only, from an Edge Function — never from the browser). Hosting: Vercel (frontend) + Supabase (backend), both free tier. Real, unavoidable costs at this scale: a domain name (~$10–15/year) and Grok API usage (usage-based, not free — see section 6c for how this is scoped down to keep it cheap).
+Stack: Next.js (TypeScript) frontends, Supabase (Postgres, Auth, Storage, Edge Functions) as the backend, **Groq** (`llama-3.3-70b-versatile`) for the AI assistant (called server-side only from the `ai-assist` Edge Function — never from the browser). Hosting: Vercel (frontend) + Supabase (backend). Design system: `design-system/autoserve/MASTER.md` (navy `#0F172A`, accent `#0369A1`, Plus Jakarta Sans, dense dashboard).
 
 ---
 
@@ -16,35 +16,31 @@ autoserve/
 │   ├── dealer-web/            # Next.js app — dealer staff use this
 │   │   ├── app/
 │   │   │   ├── (auth)/login/
-│   │   │   ├── (dashboard)/
-│   │   │   │   ├── inventory/
-│   │   │   │   ├── leads/
-│   │   │   │   └── staff/
+│   │   │   ├── (dashboard)/home|inventory|leads|staff/
+│   │   │   ├── accept-invite/ | forgot-password/ | preview/
 │   │   │   └── layout.tsx
-│   │   ├── components/
-│   │   ├── lib/                # supabase client, helpers
-│   │   ├── middleware.ts       # route protection, session check
+│   │   ├── middleware.ts       # route protection + deactivated/suspended re-check
 │   │   └── package.json
 │   │
-│   └── admin-panel/            # Next.js app — you + your friend only
+│   └── admin-panel/            # Next.js app — founders only
 │       ├── app/
 │       │   ├── (auth)/login/
-│       │   ├── dealers/        # approve/suspend dealers
-│       │   ├── overview/       # platform-wide stats
+│       │   ├── dealers/        # create, detail, approve/suspend
+│       │   ├── overview/       # platform-wide stats + WoW leads
 │       │   └── layout.tsx
 │       └── package.json
 │
 ├── packages/
-│   ├── shared-types/            # TS types generated from DB schema
-│   ├── shared-ui/                # shared React components (buttons, forms)
-│   └── supabase-client/          # typed Supabase client wrapper, shared by both apps
+│   ├── shared-types/            # TS domain types (Stage 1 hand-maintained)
+│   ├── shared-ui/                # Button, Field, Card, Skeleton, ConfirmDialog, etc.
+│   └── supabase-client/          # browser + server Supabase clients
 │
+├── design-system/autoserve/      # MASTER.md from ui-ux-pro-max
 ├── supabase/
-│   ├── migrations/               # every schema change, timestamped, never edited by hand in prod
+│   ├── migrations/               # 0001_init … 0005_ops_enrichment
 │   ├── functions/                # Edge Functions (Deno)
-│   │   ├── approve-dealer/
-│   │   ├── assign-lead/
-│   │   └── dealer-stats/
+│   │   ├── create-dealer/ | invite-staff/ | check-dealer-status/
+│   │   ├── approve-dealer/ | assign-lead/ | dealer-stats/ | ai-assist/
 │   ├── seed.sql                  # sample data for local dev
 │   └── config.toml
 │
@@ -257,7 +253,9 @@ create policy "owner manages own invites" on staff_invites
 
 Apply the same `is_dealer_staff(dealer_id) or is_admin()` pattern to `car_photos` (join through `cars`) and `lead_activity` (join through `leads`). Every policy should follow this shape: **default deny, then explicitly allow by role** — never write a policy that starts permissive and tries to exclude cases.
 
-**Why owners get a separate `is_dealer_owner` check, not just `is_dealer_staff`:** a salesperson is "staff" too, and should never be able to add or remove other staff. This is the direct implementation of "dealers approve their own staff" — but note it's really "the dealer's *owner*," not any staff member. Enforce this in RLS, not just by hiding the "invite staff" button in the UI for non-owners.
+**Roles (Stage 1 reality):** `owner` | `staff` only (migration `0002`). Older sections below that mention manager/salesperson are historical — do not implement three-tier roles unless you explicitly expand Stage 1.
+
+**Why owners get a separate `is_dealer_owner` check, not just `is_dealer_staff`:** a staff member should never be able to add or remove other staff. Enforce this in RLS, not just by hiding the "invite staff" button in the UI for non-owners.
 
 ---
 
@@ -298,7 +296,7 @@ Don't reach for an edge function by default. A plain insert/update through the S
 | `assign-lead` | Writes to both `leads` and `lead_activity` atomically — do this in one function so a network hiccup can't update the lead but skip the log entry. |
 | `dealer-stats` | Aggregation query (leads this week, conversion %, per-staff performance) — keep this off the client so you're not shipping raw row data just to compute a count in JS. |
 | `invite-staff` | Must call `auth.admin.inviteUserByEmail`, which requires the service role key — this can never run in the browser. Also enforces "only an active owner can invite" server-side, not just via a hidden button. |
-| `ai-assist` | Calls the Grok API with your `XAI_API_KEY` — a secret that must never reach the client. See section 6c. |
+| `ai-assist` | Calls the Groq API with your `GROQ_API_KEY` — a secret that must never reach the client. See section 6c. |
 
 Everything else (adding a car, moving a lead card between columns, adding a note) is a direct, RLS-protected client call. Fewer moving parts = fewer things to secure and debug.
 
@@ -317,7 +315,7 @@ Client: calls check-dealer-status edge function with the new session → functio
 
 ---
 
-## 6c. AI assistant (dealer-facing, Grok API)
+## 6c. AI assistant (dealer-facing, Groq API)
 
 **What it does in v1** — deliberately narrow, not a general chatbot: given a lead, the assistant can (a) summarize the lead's activity history into one readable paragraph ("customer called about a 2019 Corolla, test drive done Tuesday, hesitant on price, said he's also checking a competitor"), and (b) draft a follow-up message the salesperson can review, edit, and send manually. It never sends anything itself — this stays a text-generation helper, not automated outreach, and doesn't touch WhatsApp (that's still Stage 3 territory, unchanged from before).
 
@@ -329,7 +327,7 @@ Dealer app: staff clicks "summarize" or "draft follow-up" on a lead
   → calls ai-assist edge function with { lead_id, action }
   → function verifies caller is staff at that lead's dealer (is_dealer_staff)
   → function fetches the lead + its lead_activity rows from Postgres (server-side, service role)
-  → function calls the Grok API (xAI) with a system prompt + that data
+  → function calls the Groq API (Groq) with a system prompt + that data
   → returns generated text to the client
   → staff reviews it in the UI; nothing is saved or sent without them clicking again
 ```
@@ -351,9 +349,9 @@ create policy "system inserts ai usage" on ai_usage_log
   for insert with check (true); -- only ever inserted by the edge function using the service role
 ```
 
-**Cost control — this is the part I'm adding that you didn't ask for, and you should keep it:** Grok API calls cost real money per call, and this is the one part of your stack that isn't free. Without a cap, one dealer accidentally spamming the "summarize" button 200 times in an afternoon becomes your problem, not theirs, since you're paying for the API key. Two cheap safeguards:
-- A simple per-dealer daily limit (e.g. 50 AI calls/day) checked in the `ai-assist` function against `ai_usage_log` counts before calling Grok — return a clear "daily AI limit reached" message rather than silently degrading.
-- Keep prompts short (send only the specific lead's notes, not the dealer's whole history) — this is both cheaper per call and more accurate, since Grok isn't guessing which conversation you mean.
+**Cost control — this is the part I'm adding that you didn't ask for, and you should keep it:** Groq API calls cost real money per call, and this is the one part of your stack that isn't free. Without a cap, one dealer accidentally spamming the "summarize" button 200 times in an afternoon becomes your problem, not theirs, since you're paying for the API key. Two cheap safeguards:
+- A simple per-dealer daily limit (e.g. 50 AI calls/day) checked in the `ai-assist` function against `ai_usage_log` counts before calling Groq — return a clear "daily AI limit reached" message rather than silently degrading.
+- Keep prompts short (send only the specific lead's notes, not the dealer's whole history) — this is both cheaper per call and more accurate, since Groq isn't guessing which conversation you mean.
 
 **What I'd explicitly ask you before building this, rather than assume:** is this a free feature bundled into every dealer's access, or something you'd eventually gate behind a paid tier? You don't have a revenue model yet (flagged back in the first conversation) — and "AI features" is usually the first thing that becomes a paid tier once you do have one. Doesn't need answering today, but the `ai_usage_log` table above is exactly what you'd need to bill against later, so building it now costs nothing and saves you a migration if you gate it later.
 
@@ -386,8 +384,8 @@ These are the scenarios that don't show up until real dealers are using this —
 - Invited person never accepts, invite expires → a scheduled check (or just check at read-time) flips `status` to `'expired'`; the owner's staff list should visibly distinguish "invited," "expired," and "active" so this isn't invisible.
 
 **AI-assistant edge cases**
-- Grok API call times out or errors → return a clear failure to the UI ("AI assistant unavailable, try again") rather than a blank/broken state; do **not** silently fall back to fabricating a summary client-side.
-- Lead has zero `lead_activity` rows yet (brand new lead) → the function should refuse with "not enough history to summarize yet" rather than asking Grok to invent content from nothing.
+- Groq API call times out or errors → return a clear failure to the UI ("AI assistant unavailable, try again") rather than a blank/broken state; do **not** silently fall back to fabricating a summary client-side.
+- Lead has zero `lead_activity` rows yet (brand new lead) → the function should refuse with "not enough history to summarize yet" rather than asking Groq to invent content from nothing.
 - Dealer hits their daily AI-call cap → this must be a normal, expected UI state ("come back tomorrow" / "contact us to raise your limit"), not treated as an error in your logs — it's a limit working as designed, not a bug.
 
 **Empty / zero-state cases**
@@ -429,7 +427,7 @@ These are the scenarios that don't show up until real dealers are using this —
 | Auth | Supabase Auth | Managed sessions, invite-by-email built in (used directly by `invite-staff`), no custom password/session handling. |
 | File storage | Supabase Storage | Same project, same auth context, RLS-compatible policies — no separate S3 setup needed at this scale. |
 | Serverless functions | Supabase Edge Functions (Deno) | Only for privileged/multi-step logic (see section 6) — colocated with the DB, no separate hosting to manage. |
-| AI | xAI Grok API, called only from `ai-assist` edge function | Per your choice. Never called from the browser — that would expose your API key. |
+| AI | Groq API, called only from `ai-assist` edge function | Per your choice. Never called from the browser — that would expose your API key. |
 | Frontend hosting | Vercel (free tier, 2 projects) | Native Next.js support, automatic preview deploys per PR, zero-config for this stack. |
 | Monorepo tooling | pnpm workspaces + Turborepo | Shared types/UI across two apps without publishing packages; Turborepo caches builds so CI stays fast as the repo grows. |
 | Testing | Vitest (unit) + Playwright (a handful of smoke e2e tests, not full coverage) | Full e2e coverage is disproportionate effort for a solo/small team pre-traction; a few critical-path tests (login, add car, move a lead) catch the failures that actually matter. |
@@ -495,12 +493,12 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       - name: Set function secrets
         run: |
-          supabase secrets set XAI_API_KEY=${{ secrets.XAI_API_KEY }} --project-ref $SUPABASE_PROJECT_REF
+          supabase secrets set GROQ_API_KEY=${{ secrets.GROQ_API_KEY }} --project-ref $SUPABASE_PROJECT_REF
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 ```
 
-Required GitHub repo secrets (Settings → Secrets → Actions): `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `XAI_API_KEY`. Vercel needs no secrets here — it manages its own env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) via its dashboard, set once per project.
+Required GitHub repo secrets (Settings → Secrets → Actions): `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF`, `GROQ_API_KEY`. Vercel needs no secrets here — it manages its own env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) via its dashboard, set once per project.
 
 **Deliberately not included yet:** a separate staging Supabase project wired into this pipeline. For a solo/small team pre-launch, testing migrations locally (`supabase db push` against your local Docker instance) before merging is enough discipline; add a true staging environment once you have a live dealer whose data you can't risk breaking with an untested migration.
 
@@ -511,7 +509,7 @@ Required GitHub repo secrets (Settings → Secrets → Actions): `SUPABASE_ACCES
 - **Environments now**: local dev (Supabase CLI + Docker) → production, via the pipeline in section 10. A dedicated staging Supabase project is intentionally deferred (see section 10) until you have a live dealer whose data is too risky to test migrations against directly.
 - **Frontend**: both apps deploy to Vercel free tier, connected to their folders in the monorepo (`apps/dealer-web`, `apps/admin-panel`) as separate Vercel projects, auto-deploying on push via Vercel's own Git integration.
 - **Backend**: Supabase free tier (500MB DB, 1GB storage, included edge functions) — enough for a one-city pilot with a handful of dealers. Watch these limits as you add dealers; free tier is a pilot budget, not a permanent one.
-- **The one paid line item that scales with usage**: Grok API calls. Everything else in this stack stays at $0 until you outgrow free tiers; Grok is metered from day one, which is exactly why section 6c has a hard daily cap per dealer.
+- **The one paid line item that scales with usage**: Groq API calls. Everything else in this stack stays at $0 until you outgrow free tiers; Groq is metered from day one, which is exactly why section 6c has a hard daily cap per dealer.
 
 ---
 
